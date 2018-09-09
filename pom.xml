@@ -4,7 +4,7 @@
 
 	<groupId>org.dajlab</groupId>
 	<artifactId>jtoypad</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>0.0.1</version>
 	<packaging>jar</packaging>
 
 	<name>JToyPad</name>
@@ -59,6 +59,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-dependency-plugin</artifactId>
+				<version>3.1.1</version>
 				<executions>
 					<execution>
 						<id>copy-dependencies</id>
@@ -124,7 +125,7 @@
 		<dependency>
 			<groupId>org.dajlab</groupId>
 			<artifactId>dajlab-core</artifactId>
-			<version>0.0.1-SNAPSHOT</version>
+			<version>0.0.1</version>
 		</dependency>
 		<dependency>
 			<groupId>junit</groupId>
