@@ -95,7 +95,17 @@ public class ToyPadImpl implements ToyPad, UsbPipeListener {
 	 */
 	private Map<Integer, TagEvent> mapEvents = new HashMap<>();
 
+	/**
+	 * USB pipe in.
+	 */
 	private UsbPipe pipeIn;
+
+	/**
+	 * Cache for tags.<br>
+	 * Key: UID<br>
+	 * Value: Tag
+	 */
+	private Map<String, Tag> tagCache;
 
 	/**
 	 * Constructor.
@@ -108,6 +118,7 @@ public class ToyPadImpl implements ToyPad, UsbPipeListener {
 	public ToyPadImpl(final UsbDevice usbDevice) throws ToyPadException {
 
 		this.usbDevice = usbDevice;
+		tagCache = new HashMap<>();
 		UsbConfiguration configuration = usbDevice.getActiveUsbConfiguration();
 		iface = (UsbInterface) configuration.getUsbInterfaces().get(0);
 		open();
@@ -281,19 +292,6 @@ public class ToyPadImpl implements ToyPad, UsbPipeListener {
 	public void turnOffPads() throws ToyPadException {
 
 		switchPad(PadEnum.ALL, Color.BLACK);
-	}
-
-	/**
-	 * Unworking command ?
-	 * 
-	 * @param pad
-	 *            pad
-	 * @throws ToyPadException
-	 *             exception
-	 */
-	private void getColor(final PadEnum pad) throws ToyPadException {
-		// TODO Does this command really work ?
-		sendCommand(CommandEnum.GET_COL, new byte[] { pad.getValue() });
 	}
 
 	/**
@@ -485,9 +483,8 @@ public class ToyPadImpl implements ToyPad, UsbPipeListener {
 	 * 
 	 * @param data
 	 *            data
-	 * @return a tag
 	 */
-	private Tag decodeInput(final byte[] data) {
+	private void decodeInput(final byte[] data) {
 
 		if (logger.isTraceEnabled()) {
 			logger.trace("Incoming {}", TagDecoder.byteToHex(data));
@@ -509,29 +506,30 @@ public class ToyPadImpl implements ToyPad, UsbPipeListener {
 					byte b = data[i];
 					uid.append(String.format("%02X", b));
 				}
-				tagEvent.getTag().setUid(uid.toString());
+				String sUid = uid.toString();
+				tagEvent.getTag().setUid(sUid);
 				logger.debug("Tag's UID = [{}]", tagEvent.getTag().getUid());
+
+				byte idx = data[4];
+				tagEvent.setIndex(idx);
 
 				if (action == ActionEnum.ADDED) {
 					logger.debug("Tag " + action.name().toLowerCase() + " to " + pad.name().toLowerCase() + " pad");
-					byte idx = data[4];
-
-					try {
-						int counter = 0;
-						// Sending READ command
-						byte[] readPl = new byte[] { idx, 0x24 };
-						counter = sendCommand(CommandEnum.READ, readPl);
-
-						// Sending LST_MODEL command
-						byte[] lst_modelPl = new byte[8];
-						lst_modelPl[0] = idx;
-						counter = sendCommand(CommandEnum.LST_MODEL, TagDecoder.encode(lst_modelPl));
-
-						mapEvents.put(new Integer(counter), tagEvent);
-					} catch (ToyPadException e) {
-						logger.warn("Fail to send read/lst_model command.");
+					if (tagCache.containsKey(sUid)) {
+						tag = tagCache.get(sUid);
+						tagEvent.setTag(tag);
+						fireTagEvent(tagEvent);
+					} else {
+						try {
+							int counter = 0;
+							// Sending READ command
+							byte[] readPl = new byte[] { idx, 0x24 };
+							counter = sendCommand(CommandEnum.READ, readPl);
+							mapEvents.put(new Integer(counter), tagEvent);
+						} catch (ToyPadException e) {
+							logger.warn("Fail to send READ command.");
+						}
 					}
-
 				} else {
 					logger.debug("Tag " + action.name().toLowerCase() + " from " + pad.name().toLowerCase() + " pad");
 					fireTagEvent(tagEvent);
@@ -540,42 +538,66 @@ public class ToyPadImpl implements ToyPad, UsbPipeListener {
 		} else if (data[0] == PREFIX_GENERIC) {
 			// Awaited message
 			if (data[1] == 0x12) {
-				// For vehicle tag
-				// return for 0x26 : 55 12 02 00 00 01 00 00 00 00 00 00 60 08
-				// 3F BD 04 00 00 1E
-				// F0
-				// return for 0x24 : 55 12 02 00 00 00 00 00 00 00 00 00 00 01
-				// 00 00 00 00 00 00
-				// 6A 00 00 00 00 00 00 00 00 00 00
 
-				// for character
-				// return for 0x26 : 55 12 02 00 00 00 00 00 00 00 00 00 60 0C
-				// 3F BD 04 00 00 1E
-				// F3 00 00 00 00 00 00 00 00 00 00
-				// return for 0x24 : 55 12 02 00 FB 80 AB F8 4E B1 0A 65 00 00
-				// 00 00 00 00 00 00
-				// F5 00 00 00 00 00 00 00 00 00 00
+				logger.debug("Response for READ command");
+				int counter = data[2];
+
+				byte isVehicle = data[13];
+				if (isVehicle == 0x01) {
+					// It's a vehicle
+					byte[] idVehicle = new byte[2];
+					idVehicle[0] = data[4];
+					idVehicle[1] = data[5];
+
+					tag = TagDecoder.decodeVehicle(idVehicle);
+					TagEvent tagEvent = mapEvents.remove(new Integer(counter));
+					if (tagEvent != null) {
+						tag.setUid(tagEvent.getTag().getUid());
+						tagCache.put(tag.getUid(), tag);
+						tagEvent.getTag().setId(tag.getId());
+						tagEvent.getTag().setName(tag.getName());
+						fireTagEvent(tagEvent);
+					}
+				} else {
+					// It's a character
+					// Sending LST_MODEL command
+					byte[] lst_modelPl = new byte[8];
+					TagEvent tagEvent = mapEvents.remove(new Integer(counter));
+					if (tagEvent != null) {
+						lst_modelPl[0] = tagEvent.getIndex();
+						try {
+							counter = sendCommand(CommandEnum.LST_MODEL, TagDecoder.encode(lst_modelPl));
+							mapEvents.put(new Integer(counter), tagEvent);
+						} catch (ToyPadException e) {
+							logger.warn("Fail to send LST_MODEL command.");
+						}
+					}
+				}
 
 			} else if (data[1] == 0x0a) {
 				// Example : 55 0A 09 00 7D 9C 04 79 96 32 69 B1 E0 00 00 00 00
 				// 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+				logger.debug("Response for LST_MODEL command");
 				int counter = data[2];
 
-				TagEvent tagEvent = mapEvents.get(new Integer(counter));
-
-				byte[] idcrypted = new byte[8];
-				for (int i = 4; i < 12; i++) {
-					idcrypted[i - 4] = data[i];
+				TagEvent tagEvent = mapEvents.remove(new Integer(counter));
+				if (tagEvent != null) {
+					byte[] idcrypted = new byte[8];
+					for (int i = 4; i < 12; i++) {
+						idcrypted[i - 4] = data[i];
+					}
+					tag = TagDecoder.decodeCharacter(idcrypted);
+					tag.setUid(tagEvent.getTag().getUid());
+					tagCache.put(tag.getUid(), tag);
+					tagEvent.getTag().setId(tag.getId());
+					tagEvent.getTag().setName(tag.getName());
+					fireTagEvent(tagEvent);
 				}
-				tag = TagDecoder.decode(idcrypted);
-				tagEvent.getTag().setId(tag.getId());
-				tagEvent.getTag().setName(tag.getName());
-				fireTagEvent(tagEvent);
 			} else {
 				logger.debug("Useless return.");
 			}
 		}
-		return tag;
 	}
 
 	/**

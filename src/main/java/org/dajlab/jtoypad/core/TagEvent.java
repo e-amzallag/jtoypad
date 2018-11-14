@@ -39,6 +39,11 @@ public class TagEvent {
 	private ActionEnum action;
 
 	/**
+	 * Index on toypad.
+	 */
+	private byte index;
+
+	/**
 	 * Tag.
 	 */
 	private Tag tag = new Tag();
@@ -111,6 +116,21 @@ public class TagEvent {
 	 */
 	public final void setTag(final Tag tag) {
 		this.tag = tag;
+	}
+
+	/**
+	 * @return the index
+	 */
+	public final byte getIndex() {
+		return index;
+	}
+
+	/**
+	 * @param index
+	 *            the index to set
+	 */
+	public final void setIndex(final byte index) {
+		this.index = index;
 	}
 
 }

@@ -47,8 +47,8 @@ public class TagDecoder {
 	private static ResourceBundle vehicles = PropertyResourceBundle.getBundle("vehicles");
 
 	/**
-	 * Key for TEA (see https://en.wikipedia.org/wiki/Tiny_Encryption_Algorithm
-	 * for more about TEA).
+	 * Key for TEA (see https://en.wikipedia.org/wiki/Tiny_Encryption_Algorithm for
+	 * more about TEA).
 	 */
 	private static byte[] teakey = { 0x55, (byte) 0xFE, (byte) 0xF6, (byte) 0xB0, 0x62, (byte) 0xBF, 0x0B, 0x41,
 			(byte) 0xC9, (byte) 0xB3, 0x7C, (byte) 0xB4, (byte) 0x97, 0x3E, 0x29, 0x7B };
@@ -159,15 +159,15 @@ public class TagDecoder {
 	}
 
 	/**
-	 * Decode tag.
+	 * Decode a character tag.
 	 * 
 	 * @param data
-	 *            data
+	 *            data (8 bytes array expected)
 	 * @return a Tag with id and name (if a character's name matches the id)
 	 */
-	public static Tag decode(final byte[] data) {
+	public static Tag decodeCharacter(final byte[] data) {
 
-		logger.trace("Decoding {}", byteToHex(data));
+		logger.trace("Decoding character {}", byteToHex(data));
 
 		Tag tag = new Tag();
 
@@ -188,6 +188,51 @@ public class TagDecoder {
 
 		return tag;
 
+	}
+
+	/**
+	 * Decode a vehicle tag.
+	 * 
+	 * @param data
+	 *            data (2 bytes array expected)
+	 * @return a Tag with id and name (if a vehicle's name matches the id)
+	 */
+	public static Tag decodeVehicle(byte[] data) {
+
+		logger.trace("Decoding vehicle {}", byteToHex(data));
+
+		Tag tag = new Tag();
+
+		int id = readUInt16LE(data, 0);
+		tag.setId(id);
+		logger.debug("Vehicle's id = [{}]", id);
+		String name = null;
+		try {
+			name = vehicles.getString(String.valueOf(id));
+			logger.debug("Vehicle's name = [{}]", name);
+		} catch (MissingResourceException e) {
+			logger.debug("No vehicle for id [{}]", id);
+		}
+		tag.setName(name);
+
+		return tag;
+	}
+
+	/**
+	 * Read int 16 bits Little Endian
+	 * 
+	 * @param bytes
+	 *            bytes
+	 * @param pointer
+	 *            pointer
+	 * @return int
+	 */
+	private static int readUInt16LE(byte[] bytes, int pointer) {
+		ByteBuffer buffer = ByteBuffer.allocate(8);
+		buffer.put(bytes, pointer, 2);
+		buffer.put(new byte[6]);
+		buffer.flip();
+		return buffer.order(ByteOrder.LITTLE_ENDIAN).getInt();
 	}
 
 	/**
