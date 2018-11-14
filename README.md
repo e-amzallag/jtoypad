@@ -9,5 +9,5 @@ See [dajlab.org/jtoypad.html](https://www.dajlab.org/jtoypad.html) for more info
 Feel free to send pull requests.
 
 ## Change history
-0.0.2 Add vehicle decoding and tag caching
-0.0.1 initial version
+- 0.0.2 Add vehicle decoding and tag caching
+- 0.0.1 initial version
